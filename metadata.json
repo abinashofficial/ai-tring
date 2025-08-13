@@ -1,0 +1,18 @@
+{
+  "1ae8dbcf-533c-468c-b62d-dca101b8f031": {
+    "chunk_id": "1ae8dbcf-533c-468c-b62d-dca101b8f031",
+    "session_id": "abc123",
+    "user_id": "42",
+    "timestamp": "2025-08-13T05:44:12.1690429+05:30",
+    "size_bytes": 5267535,
+    "transcript": "simulated transcript text"
+  },
+  "88bf1d6d-8a9b-4590-a547-8ce098ab3f57": {
+    "chunk_id": "88bf1d6d-8a9b-4590-a547-8ce098ab3f57",
+    "session_id": "abc123",
+    "user_id": "42",
+    "timestamp": "2025-08-13T05:44:12.1308788+05:30",
+    "size_bytes": 5267535,
+    "transcript": "processing..."
+  }
+}
