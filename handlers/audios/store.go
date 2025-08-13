@@ -5,15 +5,19 @@ import (
 	"aitring/services"
 	AudioServ "aitring/services/audios"
 	"aitring/utils"
-	"encoding/json"
 	"io"
 	"net/http"
 	"time"
-
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"log"
+	"encoding/json"
+		"encoding/base64"
+
+ "strings"
+
+	"fmt"
+	
 )
 
 func New(store services.Store) Handler {
@@ -24,6 +28,7 @@ func New(store services.Store) Handler {
 
 type audioHandler struct {
 	audioService AudioServ.Service
+	  
 }
 
 var upgrader = websocket.Upgrader{
@@ -35,44 +40,93 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type UploadResponse struct {
+    Status  string `json:"status"`
+    ChunkID string `json:"chunk_id"`
+}
 func (h *audioHandler) Upload(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
-	sessionID := r.URL.Query().Get("session_id")
-	if userID == "" || sessionID == "" {
-		http.Error(w, "user_id and session_id required", http.StatusBadRequest)
-		return
-	}
+    userID := r.FormValue("user_id")
+    sessionID := r.FormValue("session_id")
+    tsStr := r.FormValue("timestamp")
 
-	data, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return
-	}
-	chunkID := uuid.NewString()
-	meta := model.ChunkMeta{
-		ChunkID:    chunkID,
-		SessionID:  sessionID,
-		UserID:     userID,
-		Timestamp:  time.Now(),
-		Size:       len(data),
-		Transcript: "processing...", // placeholder
-	}
-	err = h.audioService.UploadAudio(chunkID, data, meta)
-	if err != nil {
-		http.Error(w, "failed to upload audio", http.StatusInternalServerError)
-	}
+    if userID == "" || sessionID == "" {
+        http.Error(w, "missing user_id or session_id", http.StatusBadRequest)
+        return
+    }
 
-	utils.ReturnResponse(w, http.StatusOK, meta)
+    // Parse timestamp if provided, else use now
+    ts := time.Now()
+    if tsStr != "" {
+        if parsed, err := time.Parse(time.RFC3339, tsStr); err == nil {
+            ts = parsed
+        }
+    }
+
+    // Detect multipart vs raw
+    var data []byte
+    ct := strings.ToLower(r.Header.Get("Content-Type"))
+    if strings.HasPrefix(ct, "multipart/form-data") {
+        if err := r.ParseMultipartForm(25 << 20); err != nil {
+            http.Error(w, "parse multipart failed", http.StatusBadRequest)
+            return
+        }
+        file, _, err := r.FormFile("file")
+        if err != nil {
+            http.Error(w, "missing file field", http.StatusBadRequest)
+            return
+        }
+        defer file.Close()
+
+        data, err = io.ReadAll(file)
+        if err != nil {
+            http.Error(w, "read file failed", http.StatusBadRequest)
+            return
+        }
+    } else {
+        defer r.Body.Close()
+        b, err := io.ReadAll(r.Body)
+        if err != nil {
+            http.Error(w, "read body failed", http.StatusBadRequest)
+            return
+        }
+        data = b
+    }
+
+    // Create chunk
+    chunkID := uuid.NewString()
+    ackCh := make(chan model.ChunkMeta, 1)
+    raw := model.RawChunk{
+        ChunkID:   chunkID,
+        SessionID: sessionID,
+        UserID:    userID,
+        Data:      data,
+        Received:  ts,
+        AckCh:     ackCh,
+    }
+
+	
+    // Push into pipeline
+    if ok := h.audioService.UploadAudio(r.Context(), raw); !ok {
+        http.Error(w, "pipeline backpressure: rejected", http.StatusTooManyRequests)
+        return
+    }
+
+    // Respond with 202 Accepted
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusAccepted)
+    json.NewEncoder(w).Encode(UploadResponse{
+        Status:  "accepted",
+        ChunkID: chunkID,
+    })
 }
 
 func (h audioHandler) GetChunkByID(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 	meta, err := h.audioService.GetAudioMetadata(id)
 	if err != nil {
-		http.Error(w, "audio metadata not found", http.StatusNotFound)
+		utils.ErrorResponse(w,"audio metadata not found", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 	utils.ReturnResponse(w, http.StatusOK, meta)
 }
 
@@ -80,52 +134,69 @@ func (h audioHandler) GetChunksByUser(w http.ResponseWriter, r *http.Request) {
 	userID := mux.Vars(r)["user_id"]
 	chunks, err := h.audioService.GetAudioChunks(userID)
 	if err != nil {
-		http.Error(w, "failed to get audio chunks", http.StatusInternalServerError)
+		// http.Error(w, "failed to get audio chunks", http.StatusInternalServerError)
+		utils.ErrorResponse(w,"audio metadata not found", http.StatusNotFound)
+		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(chunks)
+	utils.ReturnResponse(w, http.StatusOK, chunks)
 }
 
 func (h audioHandler) WSHandler(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
+userID := r.URL.Query().Get("user_id")
 	sessionID := r.URL.Query().Get("session_id")
-	if userID == "" || sessionID == "" {
-		http.Error(w, "user_id and session_id required", http.StatusBadRequest)
-		return
-	}
+	if userID == "" || sessionID == "" { http.Error(w, "user_id & session_id required", http.StatusBadRequest); return }
 
 	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		http.Error(w, "websocket upgrade failed", http.StatusBadRequest)
-		return
-	}
+	if err != nil { http.Error(w, "upgrade failed", http.StatusBadRequest); return }
 	defer conn.Close()
+
 	for {
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			break
+		mt, msg, err := conn.ReadMessage()
+		if err != nil { return }
+
+		// Support both binary frames and JSON text frames with base64
+		var data []byte
+		var ts = time.Now()
+		if mt == websocket.BinaryMessage {
+			data = msg
+		} else {
+			var payload struct {
+				AudioB64  string `json:"audio_b64"`
+				Timestamp string `json:"timestamp,omitempty"`
+			}
+			if err := json.Unmarshal(msg, &payload); err != nil {
+				_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"error":"invalid json"}`))
+				continue
+			}
+			if payload.Timestamp != "" { if parsed, err := time.Parse(time.RFC3339, payload.Timestamp); err == nil { ts = parsed } }
+			if payload.AudioB64 == "" {
+				_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"error":"missing audio_b64"}`))
+				continue
+			}
+			b, err := base64.StdEncoding.DecodeString(payload.AudioB64)
+			if err != nil { _ = conn.WriteMessage(websocket.TextMessage, []byte(`{"error":"invalid base64"}`)); continue }
+			data = b
 		}
 
 		chunkID := uuid.NewString()
-		meta := model.ChunkMeta{
-			ChunkID:    chunkID,
-			SessionID:  sessionID,
-			UserID:     userID,
-			Timestamp:  time.Now(),
-			Size:       len(msg),
-			Transcript: "simulated transcript text",
+		ackCh := make(chan model.ChunkMeta, 1)
+		raw := model.RawChunk{ChunkID: chunkID, SessionID: sessionID, UserID: userID, Data: data, Received: ts, AckCh: ackCh}
+		ok := h.audioService.UploadAudio(r.Context(), raw)
+
+		// Immediate ack
+		ack := map[string]any{"type": "ack", "chunk_id": chunkID, "accepted": ok}
+		bAck, _ := json.Marshal(ack)
+		_ = conn.WriteMessage(websocket.TextMessage, bAck)
+		if !ok { continue }
+
+		// Stream metadata when processed (or timeout)
+		select {
+		case meta := <-ackCh:
+			metaEv := map[string]any{"type": "metadata", "chunk_id": chunkID, "meta": meta}
+			b, _ := json.Marshal(metaEv)
+			_ = conn.WriteMessage(websocket.TextMessage, b)
+		case <-time.After(5 * time.Second):
+			_ = conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`{"type":"metadata","chunk_id":"%s","status":"pending"}`, chunkID)))
 		}
-		err = h.audioService.UploadAudio(chunkID, msg, meta) // Acknowledge
-		if err != nil {
-			utils.ErrorResponse(w, "failed to upload audio", http.StatusInternalServerError)
-		}
-		resp := map[string]interface{}{
-			"type":     "ack",
-			"chunk_id": chunkID,
-			"meta":     meta,
-		}
-if err := conn.WriteJSON(resp); err != nil {
-    log.Println("write json error:", err)
 }
-	}
 }

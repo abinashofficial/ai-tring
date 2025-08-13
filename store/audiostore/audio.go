@@ -30,10 +30,11 @@ type AudioStore struct {
 	metadataFile string
 }
 
-func (s *AudioStore) SaveChunk(chunkID string, data []byte, meta model.ChunkMeta) {
+func (s *AudioStore) SaveChunk(t model.TransformedChunk) {
 	s.mu.Lock()
-	s.chunks[chunkID] = data
-	s.metadata[chunkID] = meta
+	s.chunks[t.ChunkID] = t.Data
+	m := model.ChunkMeta{ChunkID: t.ChunkID, SessionID: t.SessionID, UserID: t.UserID, Timestamp: t.Received, Size: len(t.Data), Checksum: t.Checksum, Transcript: t.Transcript}
+	s.metadata[t.ChunkID] = m
 	s.mu.Unlock()
 	s.saveMetadataToDisk()
 }
@@ -48,13 +49,13 @@ func (s *AudioStore) GetMetadata(chunkID string) (model.ChunkMeta, bool) {
 func (s *AudioStore) GetChunksByUser(userID string) []model.ChunkMeta {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var results []model.ChunkMeta
+	out := make([]model.ChunkMeta, 0)
 	for _, m := range s.metadata {
 		if m.UserID == userID {
-			results = append(results, m)
+			out = append(out, m)
 		}
 	}
-	return results
+	return out
 }
 
 func (s *AudioStore) saveMetadataToDisk() {
@@ -63,3 +64,4 @@ func (s *AudioStore) saveMetadataToDisk() {
 	s.mu.RUnlock()
 	_ = os.WriteFile(s.metadataFile, data, 0644)
 }
+

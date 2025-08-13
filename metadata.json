@@ -1,18 +1,20 @@
 {
-  "1ae8dbcf-533c-468c-b62d-dca101b8f031": {
-    "chunk_id": "1ae8dbcf-533c-468c-b62d-dca101b8f031",
+  "4001b8d6-6202-4869-a0a9-451e2fe8d22b": {
+    "chunk_id": "4001b8d6-6202-4869-a0a9-451e2fe8d22b",
     "session_id": "abc123",
     "user_id": "42",
-    "timestamp": "2025-08-13T05:44:12.1690429+05:30",
+    "timestamp": "2025-08-13T20:40:56.6886755+05:30",
     "size_bytes": 5267535,
-    "transcript": "simulated transcript text"
+    "checksum": "d9717ad58b62b7a555807e05dac4290bf3b578d543a8ff96fdd6dd15a900d058",
+    "transcript": "fake transcript (5267535 bytes)"
   },
-  "88bf1d6d-8a9b-4590-a547-8ce098ab3f57": {
-    "chunk_id": "88bf1d6d-8a9b-4590-a547-8ce098ab3f57",
+  "75ff0ceb-0d6c-42fa-9f1b-e14b0d98064e": {
+    "chunk_id": "75ff0ceb-0d6c-42fa-9f1b-e14b0d98064e",
     "session_id": "abc123",
     "user_id": "42",
-    "timestamp": "2025-08-13T05:44:12.1308788+05:30",
+    "timestamp": "2025-08-13T20:40:56.6128455+05:30",
     "size_bytes": 5267535,
-    "transcript": "processing..."
+    "checksum": "d9717ad58b62b7a555807e05dac4290bf3b578d543a8ff96fdd6dd15a900d058",
+    "transcript": "fake transcript (5267535 bytes)"
   }
 }

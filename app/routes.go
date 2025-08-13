@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"aitring/model"
 
 	"github.com/gorilla/mux"
 )
@@ -49,8 +50,17 @@ func runServer(envPort string, h handlers.Store) {
 
 	r.HandleFunc("/public/upload", h.AudioHandler.Upload).Methods(http.MethodPost)
 
+
+
 	// WebSocket route
 	r.HandleFunc("/ws", h.AudioHandler.WSHandler).Methods(http.MethodGet)
+
+		// metrics endpoint (simple text)
+	r.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "ingested %d\nvalidated %d\ntransformed %d\nstored %d\nrejected %d\ndropped %d\n",
+			model.MetricsIngested.Get(), model.MetricsValidated.Get(), model.MetricsTransformed.Get(), model.MetricsStored.Get(), model.MetricsRejected.Get(), model.MetricsDropped.Get(),
+		)
+	})
 
 	//    r.HandleFunc("/events",h.FieldsHandler.SSEHandler)
 

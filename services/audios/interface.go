@@ -1,12 +1,13 @@
 package audios
 
-import(
+import (
 	"aitring/model"
+	"context"
 )
 
 type Service interface {
 	// AudioStore is the interface for audio management	
-	UploadAudio(chunkID string, data []byte, meta model.ChunkMeta) error
+	UploadAudio(ctx context.Context, raw model.RawChunk) bool
 	GetAudioChunks(userID string) ([]model.ChunkMeta, error)
 	GetAudioMetadata(chunkID string) (model.ChunkMeta, error)
 }
