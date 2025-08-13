@@ -62,26 +62,64 @@ func (h *audioHandler) Upload(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    // Detect multipart vs raw
     var data []byte
+    // Detect multipart vs raw
     ct := strings.ToLower(r.Header.Get("Content-Type"))
     if strings.HasPrefix(ct, "multipart/form-data") {
         if err := r.ParseMultipartForm(25 << 20); err != nil {
             http.Error(w, "parse multipart failed", http.StatusBadRequest)
             return
         }
-        file, _, err := r.FormFile("file")
-        if err != nil {
-            http.Error(w, "missing file field", http.StatusBadRequest)
-            return
-        }
-        defer file.Close()
 
-        data, err = io.ReadAll(file)
-        if err != nil {
-            http.Error(w, "read file failed", http.StatusBadRequest)
+        files := r.MultipartForm.File["files"]
+        if len(files) == 0 {
+            http.Error(w, "no files provided", http.StatusBadRequest)
             return
         }
+
+        var responses []UploadResponse
+        for _, fileHeader := range files {
+            file, err := fileHeader.Open()
+            if err != nil {
+                http.Error(w, "open file failed", http.StatusBadRequest)
+                return
+            }
+            data, err := io.ReadAll(file)
+            file.Close()
+            if err != nil {
+                http.Error(w, "read file failed", http.StatusBadRequest)
+                return
+            }
+
+            chunkID := uuid.NewString()
+            ackCh := make(chan model.ChunkMeta, 1)
+            raw := model.RawChunk{
+                ChunkID:   chunkID,
+                SessionID: sessionID,
+                UserID:    userID,
+                Data:      data,
+                Received:  ts,
+                AckCh:     ackCh,
+            }
+
+            // Push into pipeline
+            if ok := h.audioService.UploadAudio(r.Context(), raw); !ok {
+                http.Error(w, "pipeline backpressure: rejected", http.StatusTooManyRequests)
+                return
+            }
+
+            responses = append(responses, UploadResponse{
+                Status:  "accepted",
+                ChunkID: chunkID,
+            })
+        }
+
+        // Respond with all chunk IDs
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusAccepted)
+        json.NewEncoder(w).Encode(responses)
+        return
+    
     } else {
         defer r.Body.Close()
         b, err := io.ReadAll(r.Body)

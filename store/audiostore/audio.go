@@ -6,6 +6,8 @@ import (
 "sync"
 "os"
 "encoding/json"
+"fmt"
+"path/filepath"
 )
 
 
@@ -59,9 +61,26 @@ func (s *AudioStore) GetChunksByUser(userID string) []model.ChunkMeta {
 }
 
 func (s *AudioStore) saveMetadataToDisk() {
+	// Ensure Data directory exists
+	dataDir := "Data"
+	if err := os.MkdirAll(dataDir, os.ModePerm); err != nil {
+		fmt.Println("Error creating directory:", err)
+		return
+	}
+
+	// Prepare the file path inside Data folder
+	filePath := filepath.Join(dataDir, s.metadataFile)
+
 	s.mu.RLock()
-	data, _ := json.MarshalIndent(s.metadata, "", "  ")
+	data, err := json.MarshalIndent(s.metadata, "", "  ")
 	s.mu.RUnlock()
-	_ = os.WriteFile(s.metadataFile, data, 0644)
+	if err != nil {
+		fmt.Println("Error marshaling metadata:", err)
+		return
+	}
+
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		fmt.Println("Error writing metadata file:", err)
+	}
 }
 
