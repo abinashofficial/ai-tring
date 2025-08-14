@@ -5,9 +5,9 @@ import(
 )
 
 type Repository interface {
-	saveMetadataToDisk()
-	GetChunksByUser(userID string) []model.ChunkMeta 
+	SaveMetadataToDisk()
+	GetChunksByUser(userID string) ([]model.ChunkMeta, error) 
 	SaveChunk(t model.TransformedChunk)
-	 GetMetadata(chunkID string) (model.ChunkMeta, bool)
+	 GetMetadata(chunkID string) (model.ChunkMeta, error)
 	 
 }

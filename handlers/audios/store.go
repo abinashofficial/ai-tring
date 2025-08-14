@@ -103,7 +103,7 @@ func (h *audioHandler) Upload(w http.ResponseWriter, r *http.Request) {
             }
 
             // Push into pipeline
-            if ok := h.audioService.UploadAudio(r.Context(), raw); !ok {
+            if ok, _ := h.audioService.UploadAudio(r.Context(), raw); !ok {
                 http.Error(w, "pipeline backpressure: rejected", http.StatusTooManyRequests)
                 return
             }
@@ -144,7 +144,7 @@ func (h *audioHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	
     // Push into pipeline
-    if ok := h.audioService.UploadAudio(r.Context(), raw); !ok {
+    if ok, _ := h.audioService.UploadAudio(r.Context(), raw); !ok {
         http.Error(w, "pipeline backpressure: rejected", http.StatusTooManyRequests)
         return
     }
@@ -219,7 +219,7 @@ userID := r.URL.Query().Get("user_id")
 		chunkID := uuid.NewString()
 		ackCh := make(chan model.ChunkMeta, 1)
 		raw := model.RawChunk{ChunkID: chunkID, SessionID: sessionID, UserID: userID, Data: data, Received: ts, AckCh: ackCh}
-		ok := h.audioService.UploadAudio(r.Context(), raw)
+		ok, _ := h.audioService.UploadAudio(r.Context(), raw)
 
 		// Immediate ack
 		ack := map[string]any{"type": "ack", "chunk_id": chunkID, "accepted": ok}

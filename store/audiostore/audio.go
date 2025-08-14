@@ -8,6 +8,7 @@ import (
 "encoding/json"
 "fmt"
 "path/filepath"
+"errors"
 )
 
 
@@ -38,17 +39,20 @@ func (s *AudioStore) SaveChunk(t model.TransformedChunk) {
 	m := model.ChunkMeta{ChunkID: t.ChunkID, SessionID: t.SessionID, UserID: t.UserID, Timestamp: t.Received, Size: len(t.Data), Checksum: t.Checksum, Transcript: t.Transcript}
 	s.metadata[t.ChunkID] = m
 	s.mu.Unlock()
-	s.saveMetadataToDisk()
+	s.SaveMetadataToDisk()
 }
 
-func (s *AudioStore) GetMetadata(chunkID string) (model.ChunkMeta, bool) {
+func (s *AudioStore) GetMetadata(chunkID string) (model.ChunkMeta, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	meta, exists := s.metadata[chunkID]
-	return meta, exists
+		if !exists {
+		return model.ChunkMeta{}, errors.New("audio metadata not found")
+	}
+	return meta, nil
 }
 
-func (s *AudioStore) GetChunksByUser(userID string) []model.ChunkMeta {
+func (s *AudioStore) GetChunksByUser(userID string) ([]model.ChunkMeta, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]model.ChunkMeta, 0)
@@ -57,10 +61,13 @@ func (s *AudioStore) GetChunksByUser(userID string) []model.ChunkMeta {
 			out = append(out, m)
 		}
 	}
-	return out
+		if len(out) == 0 {
+		return nil, errors.New("no audio chunks found for user")
+	}
+	return out, nil
 }
 
-func (s *AudioStore) saveMetadataToDisk() {
+func (s *AudioStore) SaveMetadataToDisk() {
 	// Ensure Data directory exists
 	dataDir := "Data"
 	if err := os.MkdirAll(dataDir, os.ModePerm); err != nil {

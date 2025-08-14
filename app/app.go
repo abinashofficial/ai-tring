@@ -10,6 +10,8 @@ import (
 	"log"
 	"aitring/store/pipelinestore"
 	"context"
+	    "runtime/debug" // <-- for debug.Stack()
+
 )
 
 var h handlers.Store
@@ -39,6 +41,17 @@ func setupService() {
 	}
 }
 
+func safeGo(fn func()) {
+    go func() {
+        defer func() {
+            if r := recover(); r != nil {
+                log.Printf("[PANIC] in %s: %v\n%s", "pipeline workers", r, debug.Stack())
+            }
+        }()
+        fn()
+    }()
+}
+
 
 func Start() {
 		log.SetFlags(log.LstdFlags | log.Lmicroseconds)
@@ -48,7 +61,9 @@ func Start() {
 	setupHandlers()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	repos.PipelineStore.Start(ctx)
+	safeGo( func() {
+		repos.PipelineStore.Start(ctx)
+	})
 	envPort := "8080"
 
 	runServer(envPort, h)

@@ -12,6 +12,7 @@ import(
 				"fmt"
 				"runtime"
 				"aitring/store/audiostore"
+				"errors"
 )
 
 
@@ -180,18 +181,19 @@ func (p *Pipeline) Start(ctx context.Context) {
 
 
 // Ingest pushes a new raw chunk into the pipeline with backpressure handling.
-func (p *Pipeline) Ingest(ctx context.Context, raw model.RawChunk) bool {
+func (p *Pipeline) Ingest(ctx context.Context, raw model.RawChunk) (bool, error) {
 	model.MetricsIngested.Add(1)
-	return trySend(ctx, p.cfg.Policy, p.ingestQ, raw, "ingest")
+	ok := trySend(ctx, p.cfg.Policy, p.ingestQ, raw, "ingest")
+	if !ok{
+		return ok, errors.New("audio ingest failed")
+	}
+	return ok, nil
 }
 
-func (s *Pipeline) GetChunksByUser(userID string) []model.ChunkMeta {
-	out := s.store.GetChunksByUser(userID)
-	return out
+func (s *Pipeline) GetChunksByUser(userID string) ([]model.ChunkMeta, error)  {
+	return s.store.GetChunksByUser(userID)
 }
 
-func (s *Pipeline) GetMetadata(chunkID string) (model.ChunkMeta, bool) {
-
-	meta, exists := s.store.GetMetadata(chunkID)
-	return meta, exists
+func (s *Pipeline) GetMetadata(chunkID string) (model.ChunkMeta, error) {
+	return s.store.GetMetadata(chunkID)
 }

@@ -5,7 +5,6 @@ import (
 	"aitring/store"
 	AudioStore "aitring/store/audiostore"
 	"aitring/store/pipelinestore"
-	"errors"
 	"context"
 )
 
@@ -22,25 +21,16 @@ type audioService struct {
 }
 
 
-	func (s audioService) UploadAudio(ctx context.Context, raw model.RawChunk) bool{
+	func (s audioService) UploadAudio(ctx context.Context, raw model.RawChunk) (bool, error){
 		return s.audioStore.Ingest(ctx, raw)
-
 	}
 	
 	
 	func (s audioService)GetAudioChunks(userID string) ([]model.ChunkMeta, error){
-		meta := s.audioStore.GetChunksByUser(userID)
-	if len(meta) == 0 {
-		return nil, errors.New("no audio chunks found for user")
-	}
-		return meta, nil
+		return s.audioStore.GetChunksByUser(userID)
 
 	}
 	func (s audioService)GetAudioMetadata(chunkID string) (model.ChunkMeta, error){
-			meta, found := s.audioStore.GetMetadata(chunkID)
-	if !found {
-		return model.ChunkMeta{}, errors.New("audio metadata not found")
-	}
-		return meta, nil
+		return  s.audioStore.GetMetadata(chunkID)
 
 	}
